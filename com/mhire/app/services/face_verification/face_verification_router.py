@@ -3,7 +3,7 @@ from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import Optional
 
 from com.mhire.app.services.face_verification.face_verification import FaceVerification
-from .face_verification_schema import VerificationResponse, ErrorResponse
+from com.mhire.app.services.face_verification.face_verification_schema import VerificationResponse, ErrorResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)

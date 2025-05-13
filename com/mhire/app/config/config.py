@@ -15,7 +15,8 @@ class Config:
             cls._instance.fpp_detect = os.getenv("FPP_DETECT")
             cls._instance.fpp_search = os.getenv("FPP_SEARCH")
             cls._instance.fpp_add = os.getenv("FPP_ADD")
-            cls._instance.imag_url = os.getenv("IMG_URL")
+            cls._instance.fpp_get_detail = os.getenv("FPP_GET_DETAIL")
             cls._instance.face_tokens = os.getenv("FACE_TOKENS")
+            cls._instance.faceset_metadata = os.getenv("FACESET_METADATA")
 
         return cls._instance

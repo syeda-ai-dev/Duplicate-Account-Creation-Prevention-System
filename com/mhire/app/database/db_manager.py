@@ -2,9 +2,8 @@ import os
 import json
 import logging
 import aiofiles
-from typing import List, Optional
+from typing import List, Dict, Optional, Tuple
 from datetime import datetime
-import uuid
 
 from com.mhire.app.config.config import Config
 
@@ -13,53 +12,75 @@ logger = logging.getLogger(__name__)
 class DBManager:
     def __init__(self):
         self.config = Config()
-        self.image_path = self.config.imag_url
         self.tokens_path = self.config.face_tokens
+        self.faceset_metadata_path = self.config.faceset_metadata
+        self.MAX_FACESET_CAPACITY = 1000
         
         # Ensure directories exist
-        os.makedirs(self.image_path, exist_ok=True)
         os.makedirs(os.path.dirname(self.tokens_path), exist_ok=True)
+        os.makedirs(os.path.dirname(self.faceset_metadata_path), exist_ok=True)
 
-    async def save_image(self, image_data: bytes) -> Optional[str]:
+    async def get_faceset_metadata(self) -> Dict[str, Dict]:
+        """Load FaceSet metadata from local storage"""
+        try:
+            if not os.path.exists(self.faceset_metadata_path):
+                async with aiofiles.open(self.faceset_metadata_path, 'w') as f:
+                    await f.write(json.dumps({}))
+                return {}
+                
+            async with aiofiles.open(self.faceset_metadata_path, 'r') as f:
+                content = await f.read()
+                return json.loads(content) if content else {}
+                
+        except Exception as e:
+            logger.error(f"Error loading FaceSet metadata: {str(e)}")
+            return {}
+
+    async def save_faceset_metadata(self, metadata: Dict[str, Dict]) -> bool:
+        """Save FaceSet metadata to local storage"""
+        try:
+            async with aiofiles.open(self.faceset_metadata_path, 'w') as f:
+                await f.write(json.dumps(metadata))
+            return True
+        except Exception as e:
+            logger.error(f"Error saving FaceSet metadata: {str(e)}")
+            return False
+
+    async def get_face_tokens(self) -> Dict[str, str]:
         """
-        Save an image to local storage
-        Args:
-            image_data (bytes): The image data to save
+        Get all face tokens and their associated FaceSet IDs
         Returns:
-            str: The filename if successful, None otherwise
+            Dict[str, str]: Dictionary mapping face_token to faceset_id
         """
         try:
-            # Generate unique filename
-            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            filename = f"face_{timestamp}_{uuid.uuid4().hex[:8]}.jpg"
-            image_path = os.path.join(self.image_path, filename)
-            
-            # Save image
-            async with aiofiles.open(image_path, 'wb') as f:
-                await f.write(image_data)
-            
-            return filename
-            
+            if not os.path.exists(self.tokens_path):
+                async with aiofiles.open(self.tokens_path, 'w') as f:
+                    await f.write(json.dumps({}))
+                return {}
+                
+            async with aiofiles.open(self.tokens_path, 'r') as f:
+                content = await f.read()
+                return json.loads(content) if content else {}
+                
         except Exception as e:
-            logger.error(f"Error saving image: {str(e)}")
-            return None
+            logger.error(f"Error loading face tokens: {str(e)}")
+            return {}
 
-    async def save_face_token(self, face_token: str) -> bool:
+    async def save_face_token(self, face_token: str, faceset_id: str) -> bool:
         """
-        Save a face token to local storage
+        Save a face token and its associated FaceSet ID
         Args:
             face_token (str): The face token to save
+            faceset_id (str): The ID of the FaceSet containing this token
         Returns:
             bool: True if successful, False otherwise
         """
         try:
-            # Load existing tokens
-            face_tokens = await self.get_face_tokens()
-            face_tokens.append(face_token)
+            tokens = await self.get_face_tokens()
+            tokens[face_token] = faceset_id
             
-            # Save updated tokens
             async with aiofiles.open(self.tokens_path, 'w') as f:
-                await f.write(json.dumps(face_tokens))
+                await f.write(json.dumps(tokens))
             
             return True
             
@@ -67,49 +88,46 @@ class DBManager:
             logger.error(f"Error saving face token: {str(e)}")
             return False
 
-    async def get_face_tokens(self) -> List[str]:
+    async def find_available_faceset(self) -> Optional[Tuple[str, int]]:
         """
-        Get all face tokens from local storage
+        Find a FaceSet with available capacity
         Returns:
-            List[str]: List of face tokens
+            Optional[Tuple[str, int]]: Tuple of (faceset_id, current_count) if found, None if not
         """
         try:
-            if not os.path.exists(self.tokens_path):
-                async with aiofiles.open(self.tokens_path, 'w') as f:
-                    await f.write(json.dumps([]))
-                return []
-                
-            async with aiofiles.open(self.tokens_path, 'r') as f:
-                content = await f.read()
-                return json.loads(content) if content else []
-                
+            metadata = await self.get_faceset_metadata()
+            
+            for faceset_id, data in metadata.items():
+                if data.get('face_count', 0) < self.MAX_FACESET_CAPACITY:
+                    return faceset_id, data.get('face_count', 0)
+            
+            return None
+            
         except Exception as e:
-            logger.error(f"Error loading face tokens: {str(e)}")
-            return []
+            logger.error(f"Error finding available FaceSet: {str(e)}")
+            return None
 
-    async def save_face_data(self, image_data: bytes, face_token: str) -> bool:
-        """
-        Save both image and face token
-        Args:
-            image_data (bytes): The image data to save
-            face_token (str): The face token to save
-        Returns:
-            bool: True if both saves are successful, False otherwise
-        """
+    async def update_faceset_count(self, faceset_id: str, new_count: int) -> bool:
+        """Update the face count for a FaceSet"""
         try:
-            # Save image
-            filename = await self.save_image(image_data)
-            if not filename:
-                return False
-            
-            # Save face token
-            success = await self.save_face_token(face_token)
-            if not success:
-                # If token save fails, we could optionally try to delete the saved image
-                return False
-            
-            return True
-            
+            metadata = await self.get_faceset_metadata()
+            if faceset_id in metadata:
+                metadata[faceset_id]['face_count'] = new_count
+                return await self.save_faceset_metadata(metadata)
+            return False
         except Exception as e:
-            logger.error(f"Error saving face data: {str(e)}")
+            logger.error(f"Error updating FaceSet count: {str(e)}")
+            return False
+
+    async def add_new_faceset(self, faceset_id: str) -> bool:
+        """Add a new FaceSet to metadata"""
+        try:
+            metadata = await self.get_faceset_metadata()
+            metadata[faceset_id] = {
+                'face_count': 0,
+                'created_at': str(datetime.now())
+            }
+            return await self.save_faceset_metadata(metadata)
+        except Exception as e:
+            logger.error(f"Error adding new FaceSet: {str(e)}")
             return False
