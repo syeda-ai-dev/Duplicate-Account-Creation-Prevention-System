@@ -14,4 +14,8 @@ class VerificationResponse(BaseModel):
     matches: Optional[List[FaceVerificationMatch]] = None
 
 class ErrorResponse(BaseModel):
+    """Standard error response model"""
+    status_code: int = 500
     detail: str
+    error_type: Optional[str] = None  # For categorizing errors
+    timestamp: Optional[str] = None    # For error tracking

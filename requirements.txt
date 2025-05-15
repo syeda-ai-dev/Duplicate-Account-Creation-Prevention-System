@@ -8,4 +8,7 @@ faiss-cpu
 numpy
 requests
 aiofiles
-python-multipart  # For handling file uploads
+python-multipart
+aiohttp
+motor
+pymongo

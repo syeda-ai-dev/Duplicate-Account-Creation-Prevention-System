@@ -1,133 +1,108 @@
-import os
-import json
+import datetime
 import logging
-import aiofiles
-from typing import List, Dict, Optional, Tuple
-from datetime import datetime
+from typing import Dict, List, Tuple, Optional
 
-from com.mhire.app.config.config import Config
+from fastapi import HTTPException
+
+from com.mhire.app.database.db_connection import DBConnection
 
 logger = logging.getLogger(__name__)
 
-class DBManager:
+class DBManager(DBConnection):
     def __init__(self):
-        self.config = Config()
-        self.tokens_path = self.config.face_tokens
-        self.faceset_metadata_path = self.config.faceset_metadata
+        super().__init__()
         self.MAX_FACESET_CAPACITY = 1000
+
+    async def save_face_token(self, face_token: str, faceset_id: str = None) -> bool:
+        """Save a face token to an available faceset, create new if needed
         
-        # Ensure directories exist
-        os.makedirs(os.path.dirname(self.tokens_path), exist_ok=True)
-        os.makedirs(os.path.dirname(self.faceset_metadata_path), exist_ok=True)
-
-    async def get_faceset_metadata(self) -> Dict[str, Dict]:
-        """Load FaceSet metadata from local storage"""
-        try:
-            if not os.path.exists(self.faceset_metadata_path):
-                async with aiofiles.open(self.faceset_metadata_path, 'w') as f:
-                    await f.write(json.dumps({}))
-                return {}
-                
-            async with aiofiles.open(self.faceset_metadata_path, 'r') as f:
-                content = await f.read()
-                return json.loads(content) if content else {}
-                
-        except Exception as e:
-            logger.error(f"Error loading FaceSet metadata: {str(e)}")
-            return {}
-
-    async def save_faceset_metadata(self, metadata: Dict[str, Dict]) -> bool:
-        """Save FaceSet metadata to local storage"""
-        try:
-            async with aiofiles.open(self.faceset_metadata_path, 'w') as f:
-                await f.write(json.dumps(metadata))
-            return True
-        except Exception as e:
-            logger.error(f"Error saving FaceSet metadata: {str(e)}")
-            return False
-
-    async def get_face_tokens(self) -> Dict[str, str]:
-        """
-        Get all face tokens and their associated FaceSet IDs
-        Returns:
-            Dict[str, str]: Dictionary mapping face_token to faceset_id
-        """
-        try:
-            if not os.path.exists(self.tokens_path):
-                async with aiofiles.open(self.tokens_path, 'w') as f:
-                    await f.write(json.dumps({}))
-                return {}
-                
-            async with aiofiles.open(self.tokens_path, 'r') as f:
-                content = await f.read()
-                return json.loads(content) if content else {}
-                
-        except Exception as e:
-            logger.error(f"Error loading face tokens: {str(e)}")
-            return {}
-
-    async def save_face_token(self, face_token: str, faceset_id: str) -> bool:
-        """
-        Save a face token and its associated FaceSet ID
         Args:
-            face_token (str): The face token to save
-            faceset_id (str): The ID of the FaceSet containing this token
-        Returns:
-            bool: True if successful, False otherwise
+            face_token: The face token to save
+            faceset_id: Optional faceset ID to use (must exist in Face++ API)
         """
         try:
-            tokens = await self.get_face_tokens()
-            tokens[face_token] = faceset_id
-            
-            async with aiofiles.open(self.tokens_path, 'w') as f:
-                await f.write(json.dumps(tokens))
-            
+            # If faceset_id is provided, use it (it should already exist in Face++ API)
+            if not faceset_id:
+                # Find a faceset with available capacity
+                available_faceset = await self.find_available_faceset()
+                
+                if available_faceset:
+                    faceset_id, current_count = available_faceset
+                else:
+                    # This should not happen as the faceset should be created in Face++ API first
+                    # and then passed to this method
+                    logger.error("No faceset ID provided and no available faceset found")
+                    return False
+
+            # Get existing faceset or create new one
+            result = await self.collection.find_one_and_update(
+                {'_id': faceset_id},
+                {
+                    '$setOnInsert': {
+                        'created_at': datetime.datetime.now(),
+                    },
+                    '$push': {'face_tokens': face_token},
+                    '$inc': {'count': 1}
+                },
+                upsert=True,
+                return_document=True
+            )
+
             return True
-            
         except Exception as e:
             logger.error(f"Error saving face token: {str(e)}")
-            return False
+            raise HTTPException(status_code=500, detail=f"Failed to save face token: {str(e)}")
+
+    async def get_all_stored_faces(self) -> Dict[str, List[str]]:
+        """Get all facesets and their tokens for verification"""
+        try:
+            result = {}
+            cursor = self.collection.find({}, {'face_tokens': 1})
+            async for doc in cursor:
+                result[str(doc['_id'])] = doc.get('face_tokens', [])
+            return result
+        except Exception as e:
+            logger.error(f"Error getting stored faces: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to get stored faces: {str(e)}")
+
+    async def get_faceset_metadata(self) -> Dict[str, Dict]:
+        """Get metadata for all facesets"""
+        try:
+            result = {}
+            cursor = self.collection.find({}, {'count': 1, 'created_at': 1})
+            async for doc in cursor:
+                result[str(doc['_id'])] = {
+                    "count": doc.get("count", 0),
+                    "created_at": doc.get("created_at")
+                }
+            return result
+        except Exception as e:
+            logger.error(f"Error getting faceset metadata: {str(e)}")
+            raise HTTPException(status_code=500, detail=f"Failed to get faceset metadata: {str(e)}")
 
     async def find_available_faceset(self) -> Optional[Tuple[str, int]]:
-        """
-        Find a FaceSet with available capacity
-        Returns:
-            Optional[Tuple[str, int]]: Tuple of (faceset_id, current_count) if found, None if not
-        """
+        """Find a faceset with available capacity"""
         try:
-            metadata = await self.get_faceset_metadata()
-            
-            for faceset_id, data in metadata.items():
-                if data.get('face_count', 0) < self.MAX_FACESET_CAPACITY:
-                    return faceset_id, data.get('face_count', 0)
-            
+            # Find a faceset with count less than max capacity
+            doc = await self.collection.find_one(
+                {'count': {'$lt': self.MAX_FACESET_CAPACITY}},
+                sort=[('count', 1)]  # Sort by count ascending to get the least full faceset
+            )
+            if doc:
+                return str(doc['_id']), doc.get('count', 0)
             return None
-            
         except Exception as e:
-            logger.error(f"Error finding available FaceSet: {str(e)}")
+            logger.error(f"Error finding available faceset: {str(e)}")
             return None
 
-    async def update_faceset_count(self, faceset_id: str, new_count: int) -> bool:
-        """Update the face count for a FaceSet"""
+    async def update_faceset_count(self, faceset_id: str, count: int) -> bool:
+        """Update the face count for a faceset"""
         try:
-            metadata = await self.get_faceset_metadata()
-            if faceset_id in metadata:
-                metadata[faceset_id]['face_count'] = new_count
-                return await self.save_faceset_metadata(metadata)
-            return False
+            result = await self.collection.update_one(
+                {'_id': faceset_id},
+                {'$set': {'count': count}}
+            )
+            return result.modified_count > 0
         except Exception as e:
-            logger.error(f"Error updating FaceSet count: {str(e)}")
-            return False
-
-    async def add_new_faceset(self, faceset_id: str) -> bool:
-        """Add a new FaceSet to metadata"""
-        try:
-            metadata = await self.get_faceset_metadata()
-            metadata[faceset_id] = {
-                'face_count': 0,
-                'created_at': str(datetime.now())
-            }
-            return await self.save_faceset_metadata(metadata)
-        except Exception as e:
-            logger.error(f"Error adding new FaceSet: {str(e)}")
+            logger.error(f"Error updating faceset count: {str(e)}")
             return False

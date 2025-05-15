@@ -1,0 +1,41 @@
+networks:
+  app-network:
+    driver: bridge
+
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: fastapi_app
+    expose:
+      - '8052'
+    env_file:
+      - .env
+    networks:
+      - app-network
+    depends_on:
+      - mongodb
+  mongodb:
+    image: mongo:latest
+    container_name: mongodb
+    ports:
+      - '27017:27017'
+    networks:
+      - app-network
+    volumes:
+      - mongodb_data:/data/db
+  nginx:
+    image: nginx:alpine
+    container_name: nginx_proxy
+    ports:
+      - '10.0.10.41:8052:80'
+    networks:
+      - app-network
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - app
+
+volumes:
+  mongodb_data:

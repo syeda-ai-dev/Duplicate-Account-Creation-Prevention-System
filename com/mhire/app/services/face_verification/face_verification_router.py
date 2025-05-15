@@ -1,6 +1,7 @@
 import logging
-from fastapi import APIRouter, HTTPException, UploadFile, File
 from typing import Optional
+
+from fastapi import APIRouter, HTTPException, UploadFile, File
 
 from com.mhire.app.services.face_verification.face_verification import FaceVerification
 from com.mhire.app.services.face_verification.face_verification_schema import VerificationResponse, ErrorResponse
