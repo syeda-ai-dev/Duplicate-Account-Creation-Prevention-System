@@ -1,5 +1,5 @@
 # Dockerfile
-FROM python:3.12-slim
+FROM python:3.12-alpine
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1

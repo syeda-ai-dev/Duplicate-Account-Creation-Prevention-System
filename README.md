@@ -64,8 +64,8 @@ This will:
 
 - Build the FastAPI application container
 - Set up Nginx reverse proxy
-- Expose the service on port 8052
-- Access the API at ```http://your-ip-address:8052```, with Swagger UI: ```http://your-ip-address:8052/docs```
+- Expose the service on port 5001
+- Access the API at ```http://your-ip-address:5001```, with Swagger UI: ```http://your-ip-address:5001/docs```
 
 2. Stop the containers
 
