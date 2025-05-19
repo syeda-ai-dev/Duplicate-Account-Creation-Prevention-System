@@ -1,32 +1,28 @@
-# Dockerfile
-FROM python:3.12-alpine
+FROM python:3.10-slim
 
 # Set environment variables
 ENV PYTHONUNBUFFERED=1
+ENV PYTHONDONTWRITEBYTECODE=1
 
-# Install system dependencies
+# Install required packages and dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    gcc \
-    libffi-dev \
     libssl-dev \
-    python3-dev \
-    musl-dev \
-    net-tools \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Set working directory
+# Set the working directory in the container
 WORKDIR /app
 
-# Copy and install Python dependencies
+# Copy requirements first to leverage Docker cache
 COPY requirements.txt /app/
 RUN pip install --no-cache-dir -r requirements.txt gunicorn
 
-# Copy app code
+# Copy the app code into the container
 COPY . /app/
 
-# Expose the port Gunicorn listens on
+# Expose port 8000 (Uvicorn will run here)
 EXPOSE 8000
 
-# Start Gunicorn with Uvicorn workers
+# Run the Uvicorn server
+# This path matches your actual project structure
 CMD ["gunicorn", "--config", "gunicorn_config.py", "com.mhire.app.main:app"]
