@@ -5,8 +5,8 @@ from datetime import datetime
 from fastapi import HTTPException
 
 from com.mhire.app.database.db_manager import DBManager
-from com.mhire.app.services.face_verification.face_verification_schema import FaceVerificationMatch, ErrorResponse, VerificationResponse
-from com.mhire.app.services.face_verification.faceplusplus_manager import FacePlusPlusManager
+from com.mhire.app.services.verification_system.face_verification.face_verification_schema import FaceVerificationMatch, ErrorResponse, VerificationResponse
+from com.mhire.app.services.verification_system.api_manager.faceplusplus_manager import FacePlusPlusManager
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -95,35 +95,55 @@ class FaceVerification:
         try:
             face_token = await self.fpp_manager.detect_face(image_data)
             if not face_token:
-                error = ErrorResponse(status_code=400, detail="No face detected in image")
-                raise HTTPException(status_code=error.status_code, detail=error.dict())
+                return {
+                    "status": "error",
+                    "message": "No face detected in image. Please provide a clear image with a human face.",
+                    "is_duplicate": False,
+                    "face_token": None,
+                    "confidence": None,
+                    "matches": None
+                }
 
             logger.info(f"Face detected with token: {face_token}")
             matches = await self.search_similar_faces(face_token)
             
             if matches:
                 best_match = matches[0]
-                return VerificationResponse(
-                    status="duplicate_found",
-                    message="Potential duplicate face detected",
-                    is_duplicate=True,
-                    face_token=face_token,
-                    confidence=best_match.confidence,
-                    matches=matches
-                ).dict()
+                return {
+                    "status": "duplicate_found",
+                    "message": "Potential duplicate face detected",
+                    "is_duplicate": True,
+                    "face_token": face_token,
+                    "confidence": best_match.confidence,
+                    "matches": matches
+                }
             
             if not await self.save_face_data(face_token):
-                error = ErrorResponse(status_code=500, detail="Failed to save face data")
-                raise HTTPException(status_code=error.status_code, detail=error.dict())
+                return {
+                    "status": "error",
+                    "message": "Failed to save face data",
+                    "is_duplicate": False,
+                    "face_token": face_token,
+                    "confidence": None,
+                    "matches": None
+                }
 
-            return VerificationResponse(
-                status="success",
-                message="New face found and token saved successfully",
-                is_duplicate=False,
-                face_token=face_token
-            ).dict()
+            return {
+                "status": "success",
+                "message": "New face found and token saved successfully",
+                "face_token": face_token,
+                "is_duplicate": False,
+                "confidence": None,
+                "matches": None
+            }
             
         except Exception as e:
-            logger.error(f"Error in face verification: {str(e)}")
-            error = ErrorResponse(status_code=500, detail=str(e))
-            raise HTTPException(status_code=error.status_code, detail=error.dict())
+            logger.error(f"Error during face verification: {str(e)}")
+            return {
+                "status": "error",
+                "message": "Error processing image. Please try again.",
+                "is_duplicate": False,
+                "face_token": None,
+                "confidence": None,
+                "matches": None
+            }

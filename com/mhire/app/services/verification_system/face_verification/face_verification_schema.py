@@ -15,7 +15,7 @@ class VerificationResponse(BaseModel):
 
 class ErrorResponse(BaseModel):
     """Standard error response model"""
-    status_code: int = 500
+    status_code: int
     detail: str
     error_type: Optional[str] = None  # For categorizing errors
     timestamp: Optional[str] = None    # For error tracking

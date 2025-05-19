@@ -7,7 +7,7 @@ import json
 from fastapi import HTTPException
 
 from com.mhire.app.config.config import Config
-from com.mhire.app.services.face_verification.face_verification_schema import ErrorResponse
+from com.mhire.app.services.verification_system.face_verification.face_verification_schema import ErrorResponse
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -141,7 +141,7 @@ class FacePlusPlusManager:
             logger.error(error.detail)
             raise HTTPException(status_code=error.status_code, detail=error.dict())
 
-    async def detect_face(self, image_data: bytes) -> str:
+    async def detect_face(self, image_data: bytes) -> Optional[str]:
         """Detect face and get face token from Face++ API"""
         try:
             files = {
@@ -156,26 +156,16 @@ class FacePlusPlusManager:
             )
             
             if not result.get('faces'):
-                error = ErrorResponse(
-                    status_code=400,
-                    detail="No face detected in image"
-                )
-                logger.error(error.detail)
-                raise HTTPException(status_code=error.status_code, detail=error.dict())
+                logger.info("No face detected in the provided image")
+                return None
                 
             face_token = result['faces'][0]['face_token']
             logger.info(f"Successfully detected face: {face_token}")
             return face_token
             
-        except HTTPException:
-            raise
         except Exception as e:
-            error = ErrorResponse(
-                status_code=500,
-                detail=f"Face detection failed: {str(e)}"
-            )
-            logger.error(error.detail)
-            raise HTTPException(status_code=error.status_code, detail=error.dict())
+            logger.error(f"Face detection failed: {str(e)}")
+            return None
 
     async def search_faces(self, face_token: str, outer_id: str, return_count: int = 5) -> List[Dict]:
         """Search for similar faces in a specific FaceSet"""

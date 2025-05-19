@@ -3,7 +3,7 @@ from fastapi import status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
-from com.mhire.app.services.face_verification.face_verification_router import router as face_router
+from com.mhire.app.services.verification_system.face_verification.face_verification_router import router as face_router
 
 
 app = FastAPI(
