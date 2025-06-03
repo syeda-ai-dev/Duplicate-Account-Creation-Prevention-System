@@ -17,6 +17,10 @@ class Config:
             cls._instance.fpp_search = os.getenv("FPP_SEARCH")
             cls._instance.fpp_add = os.getenv("FPP_ADD")
             cls._instance.fpp_get_detail = os.getenv("FPP_GET_DETAIL")
+
+            # OpenAI API settings
+            cls._instance.openai_api_key = os.getenv("OPENAI_API_KEY")
+            cls._instance.openai_model = os.getenv("OPENAI_MODEL")
             
             # MongoDB settings
             cls._instance.mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")

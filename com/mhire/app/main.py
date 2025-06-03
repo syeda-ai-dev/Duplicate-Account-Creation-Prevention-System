@@ -4,6 +4,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import PlainTextResponse
 
 from com.mhire.app.services.verification_system.face_verification.face_verification_router import router as face_router
+from com.mhire.app.services.job_description.job_description_router import router as job_router
 
 
 app = FastAPI(
@@ -23,6 +24,7 @@ app.add_middleware(
 
 # Register routers
 app.include_router(face_router)
+app.include_router(job_router)
 
 
 @app.get("/", status_code=status.HTTP_200_OK, response_class=PlainTextResponse)
