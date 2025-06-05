@@ -23,8 +23,8 @@ class Config:
             cls._instance.openai_model = os.getenv("OPENAI_MODEL")
             
             # MongoDB settings
-            cls._instance.mongodb_uri = os.getenv("MONGODB_URI", "mongodb://localhost:27017")
-            cls._instance.mongodb_db = os.getenv("MONGODB_DB", "face_recognition")
-            cls._instance.mongodb_collection = os.getenv("MONGODB_COLLECTION", "facesets")
+            cls._instance.mongodb_uri = os.getenv("MONGODB_URI")
+            cls._instance.mongodb_db = os.getenv("MONGODB_DB")
+            cls._instance.mongodb_collection = os.getenv("MONGODB_COLLECTION")
 
         return cls._instance

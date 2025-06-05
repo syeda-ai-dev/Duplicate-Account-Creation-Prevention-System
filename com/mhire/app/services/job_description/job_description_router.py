@@ -8,6 +8,7 @@ from com.mhire.app.services.job_description.job_description import JobDescriptio
 from com.mhire.app.services.job_description.job_description_schema import (
     JobDescriptionRequest,
     JobDescriptionResponse,
+    JobDescriptionSection,
     ErrorResponse
 )
 
@@ -26,8 +27,10 @@ router = APIRouter(
 
 @router.post("/description",
     response_model=JobDescriptionResponse,
-    summary="Generate a job description",
-    description="Generate a professional job description based on provided details"
+    summary="Generate a structured job description",
+    description="""Generate a professional job description based on provided details.
+    Returns a structured response with sections for company overview, position details,
+    responsibilities, qualifications, benefits, and application process."""
 )
 async def generate_job_description(request: JobDescriptionRequest) -> JobDescriptionResponse:
     try:
@@ -37,11 +40,11 @@ async def generate_job_description(request: JobDescriptionRequest) -> JobDescrip
         # Generate the description
         result = await job_desc_generator.generate_description(request.dict())
         
-        # Return the response
+        # Return the structured response
         return JobDescriptionResponse(
             status=result["status"],
             message=result["message"],
-            job_description=result["job_description"]
+            sections=result["sections"]
         )
             
     except HTTPException as he:
