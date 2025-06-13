@@ -3,17 +3,17 @@ from typing import Optional, List
 from datetime import datetime
 
 class JobDescriptionRequest(BaseModel):
-    job_title: str
-    company_name: str
-    company_details: Optional[str] = None
-    job_location: str
-    salary_range: Optional[str] = None
-    work_hours: Optional[str] = None
-    job_type: str
-    job_requirements: str
-    vacancy: Optional[int] = 1
+    title: str
+    companyName: str
+    companyDetails: Optional[str] = None
+    location: str
+    salaryRange: Optional[str] = None
+    workHours: Optional[str] = None
+    type: List[str]
+    skills: List[str]
+    position: Optional[str]
     qualification: Optional[str] = None
-    years_of_experience: Optional[str] = None
+    experience: Optional[str] = None
     specialization: Optional[str] = None
 
 class JobDescriptionSection(BaseModel):

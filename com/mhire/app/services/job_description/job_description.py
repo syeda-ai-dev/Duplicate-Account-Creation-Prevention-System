@@ -31,21 +31,21 @@ class JobDescription:
         
         # Company Information
         prompt += "Company Information:\n"
-        prompt += f"Company Name: {job_data['company_name']}\n"
-        if job_data.get('company_details'):
-            prompt += f"Company Details: {job_data['company_details']}\n"
+        prompt += f"Company Name: {job_data['companyName']}\n"
+        if job_data.get('companyDetails'):
+            prompt += f"Company Details: {job_data['companyDetails']}\n"
         
         # Position Details
         prompt += "\nPosition Details:\n"
-        prompt += f"Job Title: {job_data['job_title']}\n"
-        prompt += f"Location: {job_data['job_location']}\n"
-        prompt += f"Job Type: {job_data['job_type']}\n"
-        prompt += f"Number of Vacancies: {job_data.get('vacancy', 1)}\n"
+        prompt += f"Job Title: {job_data['title']}\n"
+        prompt += f"Location: {job_data['location']}\n"
+        prompt += f"Job Type: {job_data['type']}\n"
+        prompt += f"Position: {job_data.get('position')}\n"
         
-        if job_data.get('salary_range'):
-            prompt += f"Salary Range: {job_data['salary_range']}\n"
-        if job_data.get('work_hours'):
-            prompt += f"Work Hours: {job_data['work_hours']}\n"
+        if job_data.get('salaryRange'):
+            prompt += f"Salary Range: {job_data['salaryRange']}\n"
+        if job_data.get('workHours'):
+            prompt += f"Work Hours: {job_data['workHours']}\n"
         if job_data.get('specialization'):
             prompt += f"Specialization: {job_data['specialization']}\n"
         
@@ -53,9 +53,9 @@ class JobDescription:
         prompt += "\nRequirements:\n"
         if job_data.get('qualification'):
             prompt += f"Qualification: {job_data['qualification']}\n"
-        if job_data.get('years_of_experience'):
-            prompt += f"Experience Required: {job_data['years_of_experience']}\n"
-        prompt += f"Skills & Requirements: {job_data['job_requirements']}\n"
+        if job_data.get('experience'):
+            prompt += f"Experience Required: {job_data['experience']}\n"
+        prompt += f"Skills & Requirements: {job_data['skills']}\n"
         
         # Output Format Instructions
         prompt += "\nPlease create a SINGLE cohesive job description that includes:\n"
@@ -81,12 +81,12 @@ class JobDescription:
         try:
             prompt = self._create_prompt(job_data)
             
-            logger.info(f"Generating description for job: {job_data['job_title']}")
+            logger.info(f"Generating description for job: {job_data['title']}")
             
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional HR content writer. Create a clear, well-structured job description in a single cohesive section using markdown formatting."},
+                    {"role": "system", "content": "You are a professional HR content writer. Create a clear, well-structured job description in plain text format. Do not use any special characters like '#', '**', or other markdown formatting symbols at any cost. Structure the content with simple headers like 'Company Overview:', 'Position Summary:', etc. Do not use the header called 'Job Description' at any cost and do not bold any text."},
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,

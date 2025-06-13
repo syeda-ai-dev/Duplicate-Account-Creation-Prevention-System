@@ -1,8 +1,6 @@
 import logging
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional
 from datetime import datetime
-import io
-from PIL import Image
 
 from fastapi import HTTPException
 
@@ -18,64 +16,6 @@ class FaceVerification:
         self.confidence_threshold = 90.0  # 88% confidence threshold
         self.fpp_manager = FacePlusPlusManager()
         self.db_manager = DBManager()
-        # Face++ image requirements
-        self.min_dimension = 48
-        self.max_dimension = 4096
-        self.max_file_size = 2 * 1024 * 1024  # 2MB in bytes
-
-    def _validate_and_process_image(self, image_data: bytes) -> Tuple[bytes, bool, str]:
-        """
-        Validate and process the image according to Face++ requirements.
-        Returns: (processed_image_data, is_valid, error_message)
-        """
-        try:
-            # Check file size
-            if len(image_data) > self.max_file_size:
-                return None, False, "Image size exceeds 2MB limit. Please upload a smaller image."
-
-            # Open and validate image
-            img = Image.open(io.BytesIO(image_data))
-            width, height = img.size
-
-            # Check dimensions
-            if width < self.min_dimension or height < self.min_dimension:
-                return None, False, f"Image dimensions too small. Minimum size is {self.min_dimension}x{self.min_dimension} pixels."
-            
-            if width > self.max_dimension or height > self.max_dimension:
-                # Resize image while maintaining aspect ratio
-                aspect_ratio = width / height
-                if width > height:
-                    new_width = min(width, self.max_dimension)
-                    new_height = int(new_width / aspect_ratio)
-                else:
-                    new_height = min(height, self.max_dimension)
-                    new_width = int(new_height * aspect_ratio)
-                
-                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
-                
-                # Convert back to bytes
-                img_byte_arr = io.BytesIO()
-                img.save(img_byte_arr, format=img.format if img.format else 'JPEG', quality=85)
-                image_data = img_byte_arr.getvalue()
-
-                # Recheck file size after resizing
-                if len(image_data) > self.max_file_size:
-                    # Further compress if still too large
-                    quality = 70
-                    while len(image_data) > self.max_file_size and quality > 20:
-                        img_byte_arr = io.BytesIO()
-                        img.save(img_byte_arr, format=img.format if img.format else 'JPEG', quality=quality)
-                        image_data = img_byte_arr.getvalue()
-                        quality -= 10
-
-                    if len(image_data) > self.max_file_size:
-                        return None, False, "Unable to process image. Please upload a smaller image or reduce image quality."
-
-            return image_data, True, ""
-
-        except Exception as e:
-            logger.error(f"Error processing image: {str(e)}")
-            return None, False, "Invalid image format or corrupted image file."
 
     async def search_similar_faces(self, face_token: str) -> List[FaceVerificationMatch]:
         """Search for similar faces across all FaceSets"""
@@ -153,70 +93,37 @@ class FaceVerification:
     async def verify_face(self, image_data: bytes) -> Dict:
         """Main verification flow - detect face, search for duplicates, save if new"""
         try:
-            # Validate and process image
-            processed_image, is_valid, error_message = self._validate_and_process_image(image_data)
-            if not is_valid:
-                return {
-                    "status": "error",
-                    "message": error_message,
-                    "is_duplicate": False,
-                    "face_token": None,
-                    "confidence": None,
-                    "matches": None
-                }
-
-            # Detect face using processed image
-            face_token = await self.fpp_manager.detect_face(processed_image)
+            face_token = await self.fpp_manager.detect_face(image_data)
             if not face_token:
-                return {
-                    "status": "error",
-                    "message": "No face detected in image. Please provide a clear image with a human face.",
-                    "is_duplicate": False,
-                    "face_token": None,
-                    "confidence": None,
-                    "matches": None
-                }
+                error = ErrorResponse(status_code=400, detail="No face detected in image")
+                raise HTTPException(status_code=error.status_code, detail=error.dict())
 
             logger.info(f"Face detected with token: {face_token}")
             matches = await self.search_similar_faces(face_token)
             
             if matches:
                 best_match = matches[0]
-                return {
-                    "status": "duplicate_found",
-                    "message": "Potential duplicate face detected",
-                    "is_duplicate": True,
-                    "face_token": face_token,
-                    "confidence": best_match.confidence,
-                    "matches": matches
-                }
+                return VerificationResponse(
+                    status="duplicate_found",
+                    message="Potential duplicate face detected",
+                    is_duplicate=True,
+                    face_token=face_token,
+                    confidence=best_match.confidence,
+                    matches=matches
+                ).dict()
             
             if not await self.save_face_data(face_token):
-                return {
-                    "status": "error",
-                    "message": "Failed to save face data",
-                    "is_duplicate": False,
-                    "face_token": face_token,
-                    "confidence": None,
-                    "matches": None
-                }
+                error = ErrorResponse(status_code=500, detail="Failed to save face data")
+                raise HTTPException(status_code=error.status_code, detail=error.dict())
 
-            return {
-                "status": "success",
-                "message": "New face found and token saved successfully",
-                "face_token": face_token,
-                "is_duplicate": False,
-                "confidence": None,
-                "matches": None
-            }
+            return VerificationResponse(
+                status="success",
+                message="New face found and token saved successfully",
+                is_duplicate=False,
+                face_token=face_token
+            ).dict()
             
         except Exception as e:
-            logger.error(f"Error during face verification: {str(e)}")
-            return {
-                "status": "error",
-                "message": f"Error processing image: {str(e)}. Please try again.",
-                "is_duplicate": False,
-                "face_token": None,
-                "confidence": None,
-                "matches": None
-            }
+            logger.error(f"Error in face verification: {str(e)}")
+            error = ErrorResponse(status_code=500, detail=str(e))
+            raise HTTPException(status_code=error.status_code, detail=error.dict())
