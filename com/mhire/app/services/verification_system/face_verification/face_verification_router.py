@@ -1,5 +1,5 @@
 import logging
-
+from typing import List
 from fastapi import APIRouter, HTTPException, UploadFile, File
 from fastapi.responses import JSONResponse
 
@@ -19,20 +19,27 @@ router = APIRouter(
     }
 )
 
+ALLOWED_MIME_TYPES = ['image/jpeg', 'image/png', 'image/jpg']
+
 @router.post("/verify", 
     response_model=VerificationResponse,
     summary="Verify a face image",
-    description="Upload a face image to verify against existing faces and prevent duplicates"
+    description="""Upload a face image to verify against existing faces and prevent duplicates.
+    Image requirements:
+    - File size: Maximum 2MB
+    - Format: JPEG, PNG
+    - Dimensions: Between 48x48 and 4096x4096 pixels
+    - Must contain a clear, unobstructed face"""
 )
 async def verify_face(file: UploadFile = File(...)) -> VerificationResponse:
     try:
-        # Validate file type
-        if not file.content_type.startswith('image/'):
+        # Validate MIME type
+        if file.content_type not in ALLOWED_MIME_TYPES:
             return JSONResponse(
                 status_code=400,
                 content={
                     "status": "error",
-                    "message": "File must be an image",
+                    "message": f"Invalid file type. Allowed types: {', '.join(ALLOWED_MIME_TYPES)}",
                     "is_duplicate": False,
                     "face_token": None,
                     "confidence": None,
@@ -40,66 +47,61 @@ async def verify_face(file: UploadFile = File(...)) -> VerificationResponse:
                 }
             )
             
-        # Read image data
-        image_data = await file.read()
-        if not image_data:
-            return JSONResponse(
-                status_code=400,
-                content={
-                    "status": "error",
-                    "message": "Empty image file",
-                    "is_duplicate": False,
-                    "face_token": None,
-                    "confidence": None,
-                    "matches": None
-                }
-            )
-            
-        # Create FaceVerification instance
-        face_verifier = FaceVerification()
-        
+        # Read image data with size limit
         try:
-            # Process the image for face verification
-            result = await face_verifier.verify_face(image_data)
-            
-            # Return error response if status is error
-            if result.get("status") == "error":
+            image_data = await file.read()
+            if not image_data:
                 return JSONResponse(
                     status_code=400,
                     content={
                         "status": "error",
-                        "message": result.get("message", "No face detected in image"),
+                        "message": "Empty image file",
                         "is_duplicate": False,
                         "face_token": None,
                         "confidence": None,
                         "matches": None
                     }
                 )
-            
-            # Return verification response for successful case
-            return VerificationResponse(
-                status=result["status"],
-                message=result["message"],
-                confidence=result.get("confidence"),
-                face_token=result["face_token"],
-                is_duplicate=result["is_duplicate"],
-                matches=result.get("matches")
-            )
-            
         except Exception as e:
-            # Log the error and return a structured error response
-            logger.error(f"Error during face verification: {str(e)}")
             return JSONResponse(
                 status_code=400,
                 content={
                     "status": "error",
-                    "message": "Error processing image. Please try again with a clear face image.",
+                    "message": f"Error reading image file: {str(e)}",
                     "is_duplicate": False,
                     "face_token": None,
                     "confidence": None,
                     "matches": None
                 }
             )
+            
+        # Create FaceVerification instance and process image
+        face_verifier = FaceVerification()
+        result = await face_verifier.verify_face(image_data)
+            
+        # Return error response if status is error
+        if result.get("status") == "error":
+            return JSONResponse(
+                status_code=400,
+                content={
+                    "status": "error",
+                    "message": result.get("message", "Error processing image"),
+                    "is_duplicate": False,
+                    "face_token": None,
+                    "confidence": None,
+                    "matches": None
+                }
+            )
+            
+        # Return verification response for successful case
+        return VerificationResponse(
+            status=result["status"],
+            message=result["message"],
+            confidence=result.get("confidence"),
+            face_token=result["face_token"],
+            is_duplicate=result["is_duplicate"],
+            matches=result.get("matches")
+        )
             
     except Exception as e:
         logger.error(f"Error handling request: {str(e)}")
@@ -107,7 +109,7 @@ async def verify_face(file: UploadFile = File(...)) -> VerificationResponse:
             status_code=500,
             content={
                 "status": "error",
-                "message": "Internal server error",
+                "message": f"Internal server error: {str(e)}",
                 "is_duplicate": False,
                 "face_token": None,
                 "confidence": None,

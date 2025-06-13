@@ -12,3 +12,4 @@ aiohttp
 motor
 pymongo
 openai
+Pillow
