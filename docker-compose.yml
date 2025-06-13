@@ -1,25 +1,24 @@
-version: '3.8'
 networks:
-  dacps-network:
+  fvjd-network:
     driver: bridge
 services:
   app:
     build: .
-    container_name: fastapi_app
+    container_name: fvjd_app
     expose:
       - '8000'
     env_file:
       - .env
     networks:
-      - dacps-network
+      - fvjd-network
     restart: unless-stopped
   nginx:
     image: nginx:alpine
     container_name: nginx_proxy
     ports:
-      - '5001:80'  # Map port 5001 on VPS to port 80 on the container
+      - '5009:80'  # Map port 5001 on VPS to port 80 on the container
     networks:
-      - dacps-network
+      - fvjd-network
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro
     depends_on:
