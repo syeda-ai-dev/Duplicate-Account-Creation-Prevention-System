@@ -27,46 +27,70 @@ class JobDescription:
 
     def _create_prompt(self, job_data: Dict) -> str:
         """Create a prompt for the OpenAI model"""
-        prompt = "Create a professional job description with the following details. Format the response as ONE complete section using markdown formatting:\n\n"
+        prompt = (
+            "Create an analytical and comprehensive job description that emphasizes the role's impact "
+            "and strategic importance. Use clear, professional language without any special characters "
+            "or formatting. Structure the content with the following sections:\n\n"
+        )
         
-        # Company Information
-        prompt += "Company Information:\n"
-        prompt += f"Company Name: {job_data['companyName']}\n"
+        # Input Data
+        prompt += f"- Role: {job_data['title']}\n"
+        prompt += f"- Company: {job_data['companyName']}\n"
         if job_data.get('companyDetails'):
-            prompt += f"Company Details: {job_data['companyDetails']}\n"
-        
-        # Position Details
-        prompt += "\nPosition Details:\n"
-        prompt += f"Job Title: {job_data['title']}\n"
-        prompt += f"Location: {job_data['location']}\n"
-        prompt += f"Job Type: {job_data['type']}\n"
-        prompt += f"Position: {job_data.get('position')}\n"
-        
+            prompt += f"- Company Profile: {job_data['companyDetails']}\n"
+        prompt += f"- Location: {job_data['location']}\n"
+        prompt += f"- Type: {', '.join(job_data['type'])}\n"
+        if job_data.get('position'):
+            prompt += f"- Level: {job_data['position']}\n"
         if job_data.get('salaryRange'):
-            prompt += f"Salary Range: {job_data['salaryRange']}\n"
+            prompt += f"- Compensation: {job_data['salaryRange']}\n"
         if job_data.get('workHours'):
-            prompt += f"Work Hours: {job_data['workHours']}\n"
+            prompt += f"- Schedule: {job_data['workHours']}\n"
         if job_data.get('specialization'):
-            prompt += f"Specialization: {job_data['specialization']}\n"
-        
-        # Requirements
-        prompt += "\nRequirements:\n"
+            prompt += f"- Focus Area: {job_data['specialization']}\n"
         if job_data.get('qualification'):
-            prompt += f"Qualification: {job_data['qualification']}\n"
+            prompt += f"- Education: {job_data['qualification']}\n"
         if job_data.get('experience'):
-            prompt += f"Experience Required: {job_data['experience']}\n"
-        prompt += f"Skills & Requirements: {job_data['skills']}\n"
+            prompt += f"- Experience: {job_data['experience']}\n"
+        prompt += f"- Required Skills: {', '.join(job_data['skills'])}\n\n"
         
-        # Output Format Instructions
-        prompt += "\nPlease create a SINGLE cohesive job description that includes:\n"
-        prompt += "- Company overview and introduction\n"
-        prompt += "- Position summary and importance\n"
-        prompt += "- Key responsibilities and duties\n"
-        prompt += "- Required qualifications and skills\n"
-        prompt += "- Benefits and compensation\n"
-        prompt += "- Application process\n\n"
-        prompt += "Format the entire response as ONE section with markdown formatting for headers and lists.\n"
-        prompt += "Important: DO NOT split the response into multiple sections with separate titles.\n"
+        # Output Instructions
+        prompt += "Create a professional job description that includes:\n\n"
+        prompt += "1. Company Overview:\n"
+        prompt += "- Analyze the company's market position and value proposition\n"
+        prompt += "- Highlight company culture and work environment\n\n"
+        
+        prompt += "2. Position Summary:\n"
+        prompt += "- Explain the role's strategic importance\n"
+        prompt += "- Describe the impact on business objectives\n"
+        prompt += "- Outline growth opportunities\n\n"
+        
+        prompt += "3. Key Responsibilities:\n"
+        prompt += "- List core duties with their business impact\n"
+        prompt += "- Emphasize leadership and collaborative aspects\n"
+        prompt += "- Include strategic decision-making responsibilities\n\n"
+        
+        prompt += "4. Required Qualifications:\n"
+        prompt += "- Detail essential technical skills and their relevance\n"
+        prompt += "- Specify experience requirements with context\n"
+        prompt += "- Include soft skills and leadership capabilities\n\n"
+        
+        prompt += "5. Benefits and Compensation:\n"
+        prompt += "- Present complete compensation package\n"
+        prompt += "- Highlight professional development opportunities\n"
+        prompt += "- Describe work-life balance benefits\n\n"
+        
+        prompt += "6. Application Process:\n"
+        prompt += "- Provide clear application instructions\n"
+        prompt += "- Outline next steps in the process\n\n"
+        
+        prompt += "Important Guidelines:\n"
+        prompt += "- Use clear, professional language\n"
+        prompt += "- Avoid special characters or formatting\n"
+        prompt += "- Focus on value and impact\n"
+        prompt += "- Be specific and actionable\n"
+        prompt += "- Keep sections clearly separated\n"
+        prompt += "- Maintain a professional, engaging tone\n"
         
         return prompt
 
@@ -78,6 +102,7 @@ class JobDescription:
         )]
 
     async def generate_description(self, job_data: Dict) -> Dict:
+        """Generate job description using OpenAI"""
         try:
             prompt = self._create_prompt(job_data)
             
@@ -86,7 +111,16 @@ class JobDescription:
             response = await self.client.chat.completions.create(
                 model=self.model,
                 messages=[
-                    {"role": "system", "content": "You are a professional HR content writer. Create a clear, well-structured job description in plain text format. Do not use any special characters like '#', '**', or other markdown formatting symbols at any cost. Structure the content with simple headers like 'Company Overview:', 'Position Summary:', etc. Do not use the header called 'Job Description' at any cost and do not bold any text."},
+                    {
+                        "role": "system", 
+                        "content": (
+                            "You are a professional technical recruiter and HR content writer. "
+                            "Create clear, analytical job descriptions that emphasize impact and value. "
+                            "Use plain text without special characters or markdown formatting. "
+                            "Structure content with clear section headers and maintain a professional tone. "
+                            "Focus on explaining why each requirement matters and how the role contributes to business success."
+                        )
+                    },
                     {"role": "user", "content": prompt}
                 ],
                 temperature=0.7,
@@ -103,6 +137,16 @@ class JobDescription:
             
             description = response.choices[0].message.content.strip()
             sections = self._parse_sections(description)
+            
+            if not sections:
+                error = ErrorResponse(
+                    status_code=500,
+                    detail="Failed to parse job description sections",
+                    error_type="ParsingError"
+                )
+                raise HTTPException(status_code=error.status_code, detail=error.dict())
+            
+            logger.info(f"Successfully generated description for: {job_data['title']}")
             
             return {
                 "status": "success",
