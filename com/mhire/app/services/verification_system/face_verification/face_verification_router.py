@@ -52,7 +52,15 @@ async def verify_face(file: UploadFile = File(...)) -> VerificationResponse:
         )
         
     except HTTPException as he:
-        # Re-raise HTTP exceptions as they are already properly formatted
+        # Handle specific case for "No face detected in image"
+        if "No face detected in image" in str(he.detail):
+            return VerificationResponse(
+                status="error",
+                message="No face detected in image",
+                is_duplicate=False,
+                matches=None
+            )
+        # Re-raise other HTTP exceptions as they are already properly formatted
         raise he
     except Exception as e:
         logger.error(f"Error during face verification: {str(e)}")
